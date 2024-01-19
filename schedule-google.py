@@ -27,7 +27,7 @@ def get_calendar_service():
     return service
 
 def create_event(service, class_info):
-    zoom_link = "https://us02web.zoom.us/j/6868372222"  # Zoom link
+    zoom_link = "[Zoom link]" 
     date_str = class_info['date']
     date_obj = datetime.datetime.strptime(date_str, '%d.%m.%y')
     day_of_week = date_obj.strftime('%A')
