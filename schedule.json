@@ -1,0 +1,352 @@
+[
+    {
+        "course": "Linux Administration 1",
+        "date": "19.12.23",
+        "lecturer": "נטלי קובלצ׳וק"
+    },
+    {
+        "course": "Linux Administration 2",
+        "date": "26.12.23",
+        "lecturer": "נטלי קובלצ׳וק"
+    },
+    {
+        "course": "Linux Administration 3",
+        "date": "2.1.24",
+        "lecturer": "נטלי קובלצ׳וק"
+    },
+    {
+        "course": "Linux Administration 4",
+        "date": "5.1.24",
+        "lecturer": "נטלי קובלצ׳וק"
+    },
+    {
+        "course": "Linux Administration 5",
+        "date": "9.1.24",
+        "lecturer": "נטלי קובלצ׳וק"
+    },
+    {
+        "course": "Linux Administration 6",
+        "date": "12.1.24",
+        "lecturer": "נטלי קובלצ׳וק"
+    },
+    {
+        "course": "Linux Administration 7",
+        "date": "16.1.24",
+        "lecturer": "נטלי קובלצ׳וק"
+    },
+    {
+        "course": "Linux Administration 8",
+        "date": "19.1.24",
+        "lecturer": "נטלי קובלצ׳וק"
+    },
+    {
+        "course": "Git/GitHub1",
+        "date": "23.1.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Git/GitHub2",
+        "date": "26.1.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Linux Scripting and Programming 1",
+        "date": "30.1.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Linux Scripting and Programming 2",
+        "date": "2.2.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Linux Scripting and Programming 3",
+        "date": "6.2.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Linux Scripting and Programming 4",
+        "date": "9.2.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Linux Scripting and Programming 5",
+        "date": "13.2.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Linux Scripting and Programming 6",
+        "date": "16.2.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Linux Scripting and Programming 7",
+        "date": "20.2.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Linux Scripting and Programming 8",
+        "date": "23.2.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 1",
+        "date": "27.2.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 2",
+        "date": "1.3.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 3",
+        "date": "5.3.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 4",
+        "date": "8.3.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "ניהול קריירה",
+        "date": "11.3.24",
+        "lecturer": "הילל קובורובסקי"
+    },
+    {
+        "course": "Python Programming 5",
+        "date": "12.3.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 6",
+        "date": "15.3.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 7",
+        "date": "19.3.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 8",
+        "date": "22.3.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 9",
+        "date": "26.3.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 10",
+        "date": "29.3.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 11",
+        "date": "2.4.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 12",
+        "date": "5.4.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Python Programming 13",
+        "date": "9.4.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Containers1",
+        "date": "12.4.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Containers2",
+        "date": "16.4.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Containers3",
+        "date": "19.4.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Kubernetes1",
+        "date": "30.4.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Kubernetes2",
+        "date": "3.5.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Kubernetes3",
+        "date": "7.5.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Kubernetes4",
+        "date": "10.5.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Kubernetes5",
+        "date": "17.5.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Kubernetes6",
+        "date": "21.5.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "AWS 1",
+        "date": "24.5.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "AWS 2",
+        "date": "28.5.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "AWS 3",
+        "date": "31.5.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "AWS 4",
+        "date": "4.6.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "AWS 5",
+        "date": "7.6.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "AWS 6",
+        "date": "14.6.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "AWS 7",
+        "date": "18.6.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "AWS 8",
+        "date": "21.6.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "CI/CD1",
+        "date": "25.6.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "CI/CD2",
+        "date": "28.6.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "CI/CD3",
+        "date": "2.7.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "CI/CD4",
+        "date": "5.7.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "CI/CD5",
+        "date": "9.7.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Monitoring1",
+        "date": "12.7.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Monitoring2",
+        "date": "16.7.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "CCSP1",
+        "date": "19.7.24",
+        "lecturer": "גדי פרקש"
+    },
+    {
+        "course": "CCSP2",
+        "date": "23.7.24",
+        "lecturer": "גדי פרקש"
+    },
+    {
+        "course": "CCSP3",
+        "date": "26.7.24",
+        "lecturer": "גדי פרקש"
+    },
+    {
+        "course": "CCSP4",
+        "date": "30.7.24",
+        "lecturer": "גדי פרקש"
+    },
+    {
+        "course": "CCSP5",
+        "date": "2.8.24",
+        "lecturer": "גדי פרקש"
+    },
+    {
+        "course": "Ansible1",
+        "date": "6.8.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "CCSP6",
+        "date": "9.8.24",
+        "lecturer": "גדי פרקש"
+    },
+    {
+        "course": "CCSP7",
+        "date": "16.8.24",
+        "lecturer": "גדי פרקש"
+    },
+    {
+        "course": "Ansible2",
+        "date": "20.8.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "CCSP8",
+        "date": "23.8.24",
+        "lecturer": "גדי פרקש"
+    },
+    {
+        "course": "Terraform1",
+        "date": "27.8.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "Terraform2",
+        "date": "30.8.24",
+        "lecturer": "יובל שאול"
+    },
+    {
+        "course": "הצגת פרויקטים",
+        "date": "3.9.24",
+        "lecturer": "יובל וערן שחם"
+    },
+    {
+        "course": "הצגת פרויקטים",
+        "date": "6.9.24",
+        "lecturer": "יובל וערן שחם"
+    }
+]
