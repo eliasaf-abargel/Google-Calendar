@@ -3,9 +3,12 @@
   "version": "1.0.0",
   "scripts": {
     "start": "concurrently \"npm run server\" \"npm run client\"",
-    "server": "cd backend && npm start",
-    "client": "cd frontend && npm start",
-    "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install"
+    "server": "cd backend && npm install && npm start",
+    "client": "cd frontend && npm install && npm start",
+    "install-all": "npm install && npm run install-backend && npm run install-frontend",
+    "install-backend": "cd backend && npm install",
+    "install-frontend": "cd frontend && npm install",
+    "postinstall": "npm run install-all"
   },
   "devDependencies": {
     "concurrently": "^6.2.0"
