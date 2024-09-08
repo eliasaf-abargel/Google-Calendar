@@ -33,3 +33,31 @@ frontend/
 │   └── index.js
 │
 └── package.json
+
+
+
+backend/
+│
+├── src/
+│   ├── controllers/
+│   │   ├── fileController.js
+│   │   └── calendarController.js
+│   │
+│   ├── services/
+│   │   ├── pdfService.js
+│   │   └── googleCalendarService.js
+│   │
+│   ├── routes/
+│   │   └── api.js
+│   │
+│   ├── models/
+│   │   └── event.js
+│   │
+│   └── app.js
+│
+├── uploads/
+├── .env
+├── package.json
+└── server.js
+
+

@@ -34,7 +34,29 @@ const NavLink = styled(Link)`
   }
 `;
 
-function Header() {
+const GoogleButton = styled.button`
+  background-color: #4285F4;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+
+  &:hover {
+    background-color: #357AE8;
+  }
+`;
+
+function Header({ isGoogleAuthorized }) {
+  const handleGoogleAuth = () => {
+    if (isGoogleAuthorized) {
+      window.gapi.auth2.getAuthInstance().signOut();
+    } else {
+      window.gapi.auth2.getAuthInstance().signIn();
+    }
+  };
+
   return (
     <HeaderContainer>
       <Nav>
@@ -42,6 +64,9 @@ function Header() {
         <div>
           <NavLink to="/">Home</NavLink>
           <NavLink to="/events">Events</NavLink>
+          <GoogleButton onClick={handleGoogleAuth}>
+            {isGoogleAuthorized ? 'Sign Out' : 'Sign In with Google'}
+          </GoogleButton>
         </div>
       </Nav>
     </HeaderContainer>

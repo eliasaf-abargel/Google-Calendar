@@ -32,6 +32,12 @@ const FileInputLabel = styled.label`
   }
 `;
 
+const FileName = styled.p`
+  margin-top: 1rem;
+  font-size: 0.9rem;
+  color: #86868b;
+`;
+
 const UploadButton = styled.button`
   background-color: #34c759;
   color: white;
@@ -52,14 +58,9 @@ const UploadButton = styled.button`
   }
 `;
 
-const FileName = styled.p`
-  margin-top: 1rem;
-  font-size: 0.9rem;
-  color: #86868b;
-`;
-
 function FileUpload() {
   const [file, setFile] = useState(null);
+  const [uploadStatus, setUploadStatus] = useState('');
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
@@ -73,14 +74,15 @@ function FileUpload() {
     formData.append('pdfFile', file);
 
     try {
-      const response = await axios.post('/api/upload', formData, {
+      setUploadStatus('Uploading...');
+      const response = await axios.post('http://localhost:5001/api/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
+      setUploadStatus('File uploaded successfully!');
       console.log(response.data);
-      // Handle successful upload (e.g., show success message, redirect to events page)
     } catch (error) {
+      setUploadStatus('Error uploading file.');
       console.error('Error uploading file:', error);
-      // Handle error (e.g., show error message)
     }
   };
 
@@ -94,6 +96,7 @@ function FileUpload() {
           Upload and Process
         </UploadButton>
       </UploadForm>
+      {uploadStatus && <p>{uploadStatus}</p>}
     </UploadContainer>
   );
 }

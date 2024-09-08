@@ -1,0 +1,17 @@
+# docker-compose.yml
+version: '3'
+services:
+  frontend:
+    build: ./frontend-calendar
+    ports:
+      - "3000:80"
+  backend:
+    build: ./backend-calendar
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/pdf-calendar
+  mongo:
+    image: mongo
+    ports:
+      - "27017:27017"
