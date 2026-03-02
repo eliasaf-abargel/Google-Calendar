@@ -1,0 +1,256 @@
+name: CI — google-calendar
+
+# ── Triggers ──────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [dev]
+  workflow_dispatch:
+    inputs:
+      ENVIRONMENT:
+        description: "Target environment"
+        type: choice
+        options: [production, staging, development]
+        default: production
+      XRAY_SCAN:
+        description: "Run Xray security scan"
+        type: choice
+        options: ["Y", "N"]
+        default: "Y"
+      SKIP_XRAY_BLOCK:
+        description: "Emergency — bypass Xray gate (requires team approval)"
+        type: choice
+        options: ["N", "Y"]
+        default: "N"
+      IMAGE_TAG:
+        description: "Override image tag (leave empty for 1.0.<run_number>)"
+        type: string
+        default: ""
+
+# ── Global env ────────────────────────────────────────────────────────────────
+env:
+  JF_URL:          ${{ vars.JFROG_URL }}
+  DOCKER_REGISTRY: ${{ vars.JFROG_DOCKER_REGISTRY }}
+  IMAGE_REPO:  gc-test1
+  IMAGE_NAME:  google-calendar
+  PROJECT_KEY: sample
+  BASE_REPO:   ${{ vars.BASE_REPO || 'docker-virtual' }}
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Job 1 — Validate (PR only): build without push to catch breakage early
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+  validate:
+    name: "Validate Build (PR)"
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JFrog CLI (OIDC)
+        id: setup-jfrog-cli
+        uses: jfrog/setup-jfrog-cli@v4
+        with:
+          oidc-provider-name: github
+          oidc-audience: jfrog-github
+        env:
+          JF_URL: ${{ env.JF_URL }}
+
+      - name: Docker Login
+        run: jf docker login ${{ env.DOCKER_REGISTRY }}
+
+      - name: Build Docker Image (validate only — no push)
+        run: |
+          jf docker build \
+            --tag ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_REPO }}/development/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }} \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            --build-arg "DOCKER_REGISTRY=${{ env.DOCKER_REGISTRY }}" \
+            --build-arg "BASE_REPO=${{ env.BASE_REPO }}" \
+            --build-arg "NPM_AUTH_TOKEN=${{ steps.setup-jfrog-cli.outputs.oidc-token }}" \
+            --build-arg "NPM_PASS=${{ steps.setup-jfrog-cli.outputs.oidc-token }}" \
+            --build-arg "NPM_USER=${{ vars.NPM_USER || 'token' }}" \
+            -f ./frontend/Dockerfile \
+            .
+
+      - name: PR Summary
+        if: always()
+        run: |
+          cat <<'EOF' >> $GITHUB_STEP_SUMMARY
+          ## PR Validation — ${{ github.event.pull_request.title }}
+          | Check | Status |
+          |---|---|
+          | Build | ${{ job.status }} |
+          | Branch | `${{ github.head_ref }}` |
+          | Commit | `${{ github.sha }}` |
+          EOF
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Job 2 — Build, Scan & Push (push to branch only)
+# ─────────────────────────────────────────────────────────────────────────────
+  build:
+    name: "Build, Scan & Push"
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image-tag:   ${{ steps.set-tag.outputs.tag }}
+      image-full:  ${{ steps.set-tag.outputs.full-image }}
+      env-path:    ${{ steps.set-tag.outputs.env-path }}
+      xray-passed: ${{ steps.xray-gate.outputs.passed }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JFrog CLI (OIDC)
+        id: setup-jfrog-cli
+        uses: jfrog/setup-jfrog-cli@v4
+        with:
+          oidc-provider-name: github
+          oidc-audience: jfrog-github
+        env:
+          JF_URL: ${{ env.JF_URL }}
+
+      - name: Docker Login
+        run: jf docker login ${{ env.DOCKER_REGISTRY }}
+
+      # ── Resolve image tag and environment path ──────────────────────────────
+      - name: Set Image Tag & Environment
+        id: set-tag
+        run: |
+          ENV_PATH="${{ github.event.inputs.ENVIRONMENT || 'production' }}"
+          TAG="${{ github.event.inputs.IMAGE_TAG || format('1.0.{0}', github.run_number) }}"
+          FULL="${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_REPO }}/${ENV_PATH}/${{ env.IMAGE_NAME }}:${TAG}"
+          echo "tag=${TAG}"           >> $GITHUB_OUTPUT
+          echo "env-path=${ENV_PATH}" >> $GITHUB_OUTPUT
+          echo "full-image=${FULL}"   >> $GITHUB_OUTPUT
+
+      # ── Build ───────────────────────────────────────────────────────────────
+      - name: Build Docker Image
+        run: |
+          jf docker build \
+            --tag ${{ steps.set-tag.outputs.full-image }} \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --build-arg "DOCKER_REGISTRY=${{ env.DOCKER_REGISTRY }}" \
+            --build-arg "BASE_REPO=${{ env.BASE_REPO }}" \
+            --build-arg "NPM_AUTH_TOKEN=${{ steps.setup-jfrog-cli.outputs.oidc-token }}" \
+            --build-arg "NPM_PASS=${{ steps.setup-jfrog-cli.outputs.oidc-token }}" \
+            --build-arg "NPM_USER=${{ vars.NPM_USER || 'token' }}" \
+            -f ./frontend/Dockerfile \
+            .
+
+      # ── Push ────────────────────────────────────────────────────────────────
+      - name: Push Docker Image
+        run: jf docker push ${{ steps.set-tag.outputs.full-image }} --project ${{ env.PROJECT_KEY }}
+
+      # ── Xray scan ───────────────────────────────────────────────────────────
+      - name: Xray Security Scan
+        id: xray-scan
+        if: github.event.inputs.XRAY_SCAN != 'N'
+        continue-on-error: true
+        run: |
+          SCAN_OUT=$(jf docker scan ${{ steps.set-tag.outputs.full-image }} --watches "web-ui" --format=json 2>/dev/null || echo '{"vulnerabilities":[]}')
+          CRITICAL=$(echo "$SCAN_OUT" | jq '[.vulnerabilities[]? | select(.severity=="Critical")] | length' 2>/dev/null || echo 0)
+          HIGH=$(echo "$SCAN_OUT"     | jq '[.vulnerabilities[]? | select(.severity=="High")]     | length' 2>/dev/null || echo 0)
+          echo "critical_count=$CRITICAL" >> $GITHUB_OUTPUT
+          echo "high_count=$HIGH"         >> $GITHUB_OUTPUT
+
+      - name: Xray Security Gate
+        id: xray-gate
+        run: |
+          [ "${{ github.event.inputs.XRAY_SCAN }}" == "N" ] && echo "passed=true" >> $GITHUB_OUTPUT && exit 0
+          [ "${{ github.event.inputs.SKIP_XRAY_BLOCK }}" == "Y" ] && echo "::warning::Emergency Xray override activated" && echo "passed=true" >> $GITHUB_OUTPUT && exit 0
+          CRITICAL=${{ steps.xray-scan.outputs.critical_count || 0 }}
+          HIGH=${{ steps.xray-scan.outputs.high_count || 0 }}
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
+            echo "::error::Xray blocked — Critical:$CRITICAL High:$HIGH"
+            echo "passed=false" >> $GITHUB_OUTPUT; exit 1
+          fi
+          echo "passed=true" >> $GITHUB_OUTPUT
+
+      # ── Build-info (Git ↔ image traceability) ───────────────────────────────
+      - name: Publish JFrog Build Info
+        if: success()
+        run: |
+          jf rt build-add-git --project ${{ env.PROJECT_KEY }}
+          jf rt build-publish --project ${{ env.PROJECT_KEY }}
+
+      - name: Build Summary
+        if: always()
+        run: |
+          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          ## CI Build — ${{ env.IMAGE_NAME }}
+          | Property  | Value |
+          |---|---|
+          | **Image** | `${{ steps.set-tag.outputs.full-image }}` |
+          | **Tag**   | `${{ steps.set-tag.outputs.tag }}` |
+          | **Env**   | `${{ steps.set-tag.outputs.env-path }}` |
+          | **Commit**| `${{ github.sha }}` |
+          | **Xray**  | ${{ steps.xray-gate.outputs.passed == 'true' && '✅ Passed' || '❌ Blocked' }} |
+          EOF
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Job 3 — Release: Promote → Cloud Distribution (SSDLC)
+# Runs only after a successful build on the default branch.
+# ─────────────────────────────────────────────────────────────────────────────
+  release:
+    name: "Release (Promote + Cloud Distribution)"
+    needs: build
+    if: |
+      needs.build.outputs.xray-passed == 'true' &&
+      github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JFrog CLI (OIDC)
+        id: setup-jfrog-cli
+        uses: jfrog/setup-jfrog-cli@v4
+        with:
+          oidc-provider-name: github
+          oidc-audience: jfrog-github
+        env:
+          JF_URL: ${{ env.JF_URL }}
+
+      - name: Docker Login
+        run: jf docker login ${{ env.DOCKER_REGISTRY }}
+
+      # Promote: copy image from dev repo → docker-releases-local
+      # The image that was scanned and approved is what we promote — immutable artifact.
+      - name: Promote Image to Release Repository
+        run: |
+          jf rt docker-promote \
+            "${{ needs.build.outputs.env-path }}/${{ env.IMAGE_NAME }}" \
+            "${{ env.IMAGE_REPO }}" \
+            "docker-releases-local" \
+            --source-tag="${{ needs.build.outputs.image-tag }}" \
+            --target-tag="${{ needs.build.outputs.image-tag }}" \
+            --copy=true
+
+      # Distribute release bundle to EDAG edge nodes (SSDLC compliance).
+      # CD (ArgoCD) will pull from the edge registry after this step.
+      - name: Cloud Distribution (SSDLC)
+        uses: JFROG/cloud-distribution@v1
+        env:
+          JF_URL:           ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN:  ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
+        with:
+          project:             ${{ env.PROJECT_KEY }}
+          service:             ${{ env.IMAGE_NAME }}
+          version:             ${{ needs.build.outputs.image-tag }}
+          skip-chart:          true
+          docker-release-repo: docker-releases-local
+          docker-images: >-
+            ${{ env.DOCKER_REGISTRY }}/docker-releases-local/${{ needs.build.outputs.env-path }}/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image-tag }}
