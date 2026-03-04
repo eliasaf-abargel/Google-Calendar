@@ -16,7 +16,6 @@ on:
         type: choice
         options:
           - "development"
-          - "production"
         default: "development"
       DOCKER_NO_CACHE:
         description: "Disable Docker layer cache"
@@ -36,9 +35,14 @@ on:
         type: string
         default: ""
 
+concurrency:
+  group: "frogops-${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 env:
   JF_URL: ${{ vars.JFROG_URL || secrets.JFROG_URL || 'https://frogops1.jfrog.io' }}
   DOCKER_REGISTRY: ${{ vars.JFROG_DOCKER_REGISTRY || secrets.JFROG_DOCKER_REGISTRY || 'frogops1.jfrog.io' }}
+  JF_USER: ${{ vars.JF_USER || secrets.JF_USER || vars.JFROG_USER || secrets.JFROG_USER || 'eliasafa@jfrog.com' || 'token' }}
   IMAGE_REPO: sample-docker-local
   IMAGE_NAME: google-calendar
   PROJECT_KEY: ${{ vars.PROJECT_KEY || secrets.PROJECT_KEY || 'sample' }}
@@ -63,6 +67,7 @@ jobs:
         id: setup-jfrog-cli
         env:
           JF_URL: ${{ env.JF_URL }}
+          JF_USER: ${{ env.JF_USER }}
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN || secrets.ARTIFACTORY_TOKEN }}
           JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
 
@@ -135,6 +140,7 @@ jobs:
         id: setup-jfrog-cli
         env:
           JF_URL: ${{ env.JF_URL }}
+          JF_USER: ${{ env.JF_USER }}
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN || secrets.ARTIFACTORY_TOKEN }}
           JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
 
@@ -201,7 +207,16 @@ jobs:
             .
 
       - name: "Push Docker image"
-        run: jf docker push ${{ steps.set-tag.outputs.full-image }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMG="${{ steps.set-tag.outputs.full-image }}"
+          if jf docker push "$IMG"; then
+            echo "jf docker push OK"
+          else
+            echo "jf docker push failed, falling back to docker push (existing docker login session)." >&2
+            docker push "$IMG"
+          fi
 
       - name: "Verify image exists in Artifactory"
         shell: bash
@@ -296,6 +311,7 @@ jobs:
         id: setup-jfrog-cli
         env:
           JF_URL: ${{ env.JF_URL }}
+          JF_USER: ${{ env.JF_USER }}
           JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN || secrets.ARTIFACTORY_TOKEN }}
           JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
 
