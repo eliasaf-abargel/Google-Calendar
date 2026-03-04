@@ -16,6 +16,7 @@ on:
         type: choice
         options:
           - "development"
+          - "production"
         default: "development"
       DOCKER_NO_CACHE:
         description: "Disable Docker layer cache"
@@ -29,6 +30,12 @@ on:
         type: choice
         options: ["Y", "N"]
         default: "Y"
+      PROMOTE_TO_RELEASE:
+        description: "Force promotion to release repository"
+        required: false
+        type: choice
+        options: ["N", "Y"]
+        default: "N"
       IMAGE_TAG:
         description: "Custom image tag (empty = auto 1.0.RUN_NUMBER)"
         required: false
@@ -44,6 +51,7 @@ env:
   DOCKER_REGISTRY: ${{ vars.JFROG_DOCKER_REGISTRY || secrets.JFROG_DOCKER_REGISTRY || 'frogops1.jfrog.io' }}
   JF_USER: ${{ vars.JF_USER || secrets.JF_USER || vars.JFROG_USER || secrets.JFROG_USER || 'eliasafa@jfrog.com' || 'token' }}
   IMAGE_REPO: sample-docker-local
+  RELEASE_IMAGE_REPO: ${{ vars.RELEASE_IMAGE_REPO || secrets.RELEASE_IMAGE_REPO || vars.RELEASE_DOCKER_REPO || secrets.RELEASE_DOCKER_REPO || 'docker-releases-local' }}
   IMAGE_NAME: google-calendar
   PROJECT_KEY: ${{ vars.PROJECT_KEY || secrets.PROJECT_KEY || 'sample' }}
   DOCKERFILE_PATH: backend/Dockerfile
@@ -88,7 +96,7 @@ jobs:
           fi
           echo "DOCKER_REGISTRY=$REG" >> $GITHUB_ENV
           USER="${{ steps.setup-jfrog-cli.outputs.oidc-user || secrets.JF_USER || vars.JF_USER || secrets.JFROG_USER || vars.JFROG_USER || secrets.NPM_USER || vars.NPM_USER || 'eliasafa@jfrog.com' || '' }}"
-          PASS="${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN || secrets.ARTIFACTORY_TOKEN }}"
+          PASS="${{ secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN || secrets.ARTIFACTORY_TOKEN }}"
           if [ -z "$PASS" ]; then
             echo "No docker login token is available." >&2
             exit 1
@@ -108,8 +116,8 @@ jobs:
           jf docker build \
             --tag ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_REPO }}/development/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }} \
             --label "org.opencontainers.image.revision=${{ github.sha }}" \
-            --build-arg "NPM_AUTH_TOKEN=${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
-            --build-arg "NPM_PASS=${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
+            --build-arg "NPM_AUTH_TOKEN=${{ secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
+            --build-arg "NPM_PASS=${{ secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
             --build-arg "NPM_USER=${{ vars.NPM_USER || secrets.NPM_USER || vars.JF_USER || secrets.JF_USER || vars.JFROG_USER || secrets.JFROG_USER || 'eliasafa@jfrog.com' || 'token' }}" \
             --build-arg "NPM_REGISTRY_URL=${{ vars.NPM_REGISTRY_URL || secrets.NPM_REGISTRY_URL }}" \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
@@ -161,7 +169,7 @@ jobs:
           fi
           echo "DOCKER_REGISTRY=$REG" >> $GITHUB_ENV
           USER="${{ steps.setup-jfrog-cli.outputs.oidc-user || secrets.JF_USER || vars.JF_USER || secrets.JFROG_USER || vars.JFROG_USER || secrets.NPM_USER || vars.NPM_USER || 'eliasafa@jfrog.com' || '' }}"
-          PASS="${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN || secrets.ARTIFACTORY_TOKEN }}"
+          PASS="${{ secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN || secrets.ARTIFACTORY_TOKEN }}"
           if [ -z "$PASS" ]; then
             echo "No docker login token is available." >&2
             exit 1
@@ -198,8 +206,8 @@ jobs:
             --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
             --label "org.opencontainers.image.revision=${{ github.sha }}" \
             --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --build-arg "NPM_AUTH_TOKEN=${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
-            --build-arg "NPM_PASS=${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
+            --build-arg "NPM_AUTH_TOKEN=${{ secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
+            --build-arg "NPM_PASS=${{ secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
             --build-arg "NPM_USER=${{ vars.NPM_USER || secrets.NPM_USER || vars.JF_USER || secrets.JF_USER || vars.JFROG_USER || secrets.JFROG_USER || 'eliasafa@jfrog.com' || 'token' }}" \
             --build-arg "NPM_REGISTRY_URL=${{ vars.NPM_REGISTRY_URL || secrets.NPM_REGISTRY_URL }}" \
             --build-arg BUILDKIT_INLINE_CACHE=1 \
@@ -211,12 +219,8 @@ jobs:
         run: |
           set -euo pipefail
           IMG="${{ steps.set-tag.outputs.full-image }}"
-          if jf docker push "$IMG"; then
-            echo "jf docker push OK"
-          else
-            echo "jf docker push failed, falling back to docker push (existing docker login session)." >&2
-            docker push "$IMG"
-          fi
+          # Use native docker push to avoid noisy jf re-auth failures with reference tokens.
+          docker push "$IMG"
 
       - name: "Verify image exists in Artifactory"
         shell: bash
@@ -296,7 +300,7 @@ jobs:
   release:
     name: "Promote to Release"
     needs: build
-    if: needs.build.outputs.xray-passed == 'true'
+    if: needs.build.outputs.xray-passed == 'true' && (needs.build.outputs.env-path == 'production' || github.event.inputs.PROMOTE_TO_RELEASE == 'Y')
     runs-on: ubuntu-latest
     environment: ${{ needs.build.outputs.env-path }}
     permissions:
@@ -332,7 +336,7 @@ jobs:
           fi
           echo "DOCKER_REGISTRY=$REG" >> $GITHUB_ENV
           USER="${{ steps.setup-jfrog-cli.outputs.oidc-user || secrets.JF_USER || vars.JF_USER || secrets.JFROG_USER || vars.JFROG_USER || secrets.NPM_USER || vars.NPM_USER || 'eliasafa@jfrog.com' || '' }}"
-          PASS="${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN || secrets.ARTIFACTORY_TOKEN }}"
+          PASS="${{ secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN || secrets.ARTIFACTORY_TOKEN }}"
           if [ -z "$PASS" ]; then
             echo "No docker login token is available." >&2
             exit 1
@@ -348,14 +352,42 @@ jobs:
           fi
 
       - name: "Promote image to release repo"
+        shell: bash
         run: |
+          set -euo pipefail
           TAG="${{ needs.build.outputs.image-tag }}"
           ENV_PATH="${{ needs.build.outputs.env-path }}"
-          jf rt docker-promote \
+          TARGET_REPO="${{ env.RELEASE_IMAGE_REPO }}"
+          if [ -z "$TARGET_REPO" ]; then
+            TARGET_REPO="docker-releases-local"
+          fi
+          REPO_JSON="$(jf rt curl -sS -XGET "/api/repositories/$TARGET_REPO" || true)"
+          if [ -z "$REPO_JSON" ]; then
+            echo "Release repository '$TARGET_REPO' not found in Artifactory. Skipping release promotion."
+            exit 0
+          fi
+          PKG_TYPE="$(echo "$REPO_JSON" | sed -n 's/.*"packageType"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)"
+          if [ -n "$PKG_TYPE" ] && [ "$PKG_TYPE" != "docker" ]; then
+            echo "Release repository '$TARGET_REPO' has packageType='$PKG_TYPE' (requires docker). Skipping release promotion."
+            exit 0
+          fi
+          set +e
+          PROMOTE_OUT="$(jf rt docker-promote \
             "${ENV_PATH}/${{ env.IMAGE_NAME }}" \
             "${{ env.IMAGE_REPO }}" \
-            "docker-releases-local" \
+            "${TARGET_REPO}" \
             --source-tag="${TAG}" \
             --target-docker-image="${ENV_PATH}/${{ env.IMAGE_NAME }}" \
             --target-tag="${TAG}" \
-            --copy=true
+            --copy=true 2>&1)"
+          PROMOTE_RC=$?
+          set -e
+          if [ $PROMOTE_RC -ne 0 ]; then
+            if echo "$PROMOTE_OUT" | grep -qi "Unsupported V2 repository request"; then
+              echo "Release repository '$TARGET_REPO' does not support Docker V2 promotion. Skipping release promotion."
+              exit 0
+            fi
+            echo "$PROMOTE_OUT" >&2
+            exit $PROMOTE_RC
+          fi
+          echo "$PROMOTE_OUT"
