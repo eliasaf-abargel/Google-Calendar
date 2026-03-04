@@ -54,8 +54,8 @@ env:
   RELEASE_IMAGE_REPO: ${{ vars.RELEASE_IMAGE_REPO || secrets.RELEASE_IMAGE_REPO || vars.RELEASE_DOCKER_REPO || secrets.RELEASE_DOCKER_REPO || 'docker-releases-local' }}
   IMAGE_NAME: google-calendar
   PROJECT_KEY: ${{ vars.PROJECT_KEY || secrets.PROJECT_KEY || 'sample' }}
-  DOCKERFILE_PATH: backend/Dockerfile
-  WORKING_DIR: backend
+  DOCKERFILE_PATH: frontend/Dockerfile
+  WORKING_DIR: frontend
 
 jobs:
   # ── PR validation (build only, no push) ────────────────────────────────────
