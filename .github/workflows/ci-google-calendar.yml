@@ -1,0 +1,321 @@
+name: "Google-Calendar Docker CI"
+
+on:
+  push:
+    branches:
+      - dev
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - dev
+  workflow_dispatch:
+    inputs:
+      ENVIRONMENT:
+        description: "Select environment"
+        required: true
+        type: choice
+        options:
+          - "development"
+          - "production"
+        default: "development"
+      DOCKER_NO_CACHE:
+        description: "Disable Docker layer cache"
+        required: false
+        type: choice
+        options: ["Y", "N"]
+        default: "N"
+      XRAY_SCAN:
+        description: "Enable JFrog Xray scan"
+        required: false
+        type: choice
+        options: ["Y", "N"]
+        default: "Y"
+      IMAGE_TAG:
+        description: "Custom image tag (empty = auto 1.0.RUN_NUMBER)"
+        required: false
+        type: string
+        default: ""
+
+env:
+  JF_URL: https://frogops1.jfrog.io
+  DOCKER_REGISTRY: frogops1.jfrog.io
+  IMAGE_REPO: sample-docker-local
+  IMAGE_NAME: google-calendar
+  PROJECT_KEY: ${{ vars.PROJECT_KEY || secrets.PROJECT_KEY || 'sample' }}
+  DOCKERFILE_PATH: backend/Dockerfile
+  WORKING_DIR: backend
+
+jobs:
+  # ── PR validation (build only, no push) ────────────────────────────────────
+  validate:
+    name: "Validate Build (PR)"
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Setup JFrog CLI"
+        uses: jfrog/setup-jfrog-cli@v4
+        id: setup-jfrog-cli
+        env:
+          JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN }}
+          JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
+
+      - name: "Login to JFrog Container Registry"
+        shell: bash
+        run: |
+          set -euo pipefail
+          REG="${{ env.DOCKER_REGISTRY }}"
+          if [ -z "$REG" ]; then
+            REG="${{ env.JF_URL }}"
+          fi
+          REG="${REG#https://}"
+          REG="${REG#http://}"
+          REG="${REG%%/*}"
+          if [ -z "$REG" ]; then
+            echo "DOCKER_REGISTRY is empty and could not be derived from JF_URL" >&2
+            exit 1
+          fi
+          echo "DOCKER_REGISTRY=$REG" >> $GITHUB_ENV
+          USER="${{ secrets.JF_USER || vars.JF_USER || secrets.NPM_USER || vars.NPM_USER || 'token' }}"
+          PASS="${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN }}"
+          if [ -z "$PASS" ]; then
+            echo "No docker login token is available." >&2
+            exit 1
+          fi
+          echo "$PASS" | docker login "$REG" -u "$USER" --password-stdin
+
+      - name: "Build (validation only — no push)"
+        run: |
+          jf docker build \
+            --tag ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_REPO }}/development/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }} \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            --build-arg "NPM_AUTH_TOKEN=${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
+            --build-arg "NPM_PASS=${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
+            --build-arg "NPM_USER=${{ vars.NPM_USER || secrets.NPM_USER || 'token' }}" \
+            --build-arg "NPM_REGISTRY_URL=${{ vars.NPM_REGISTRY_URL || secrets.NPM_REGISTRY_URL }}" \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -f ${{ env.DOCKERFILE_PATH }} \
+            .
+
+  # ── Build + Push (push to main or manual dispatch) ─────────────────────────
+  build:
+    name: "Build and Push"
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.ENVIRONMENT || 'development' }}
+    permissions:
+      contents: read
+
+    outputs:
+      image-tag: ${{ steps.set-tag.outputs.tag }}
+      image-full: ${{ steps.set-tag.outputs.full-image }}
+      env-path: ${{ steps.set-tag.outputs.env-path }}
+      xray-passed: ${{ steps.xray-check.outputs.passed }}
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Setup JFrog CLI"
+        uses: jfrog/setup-jfrog-cli@v4
+        id: setup-jfrog-cli
+        env:
+          JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN }}
+          JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
+
+      - name: "Login to JFrog Container Registry"
+        shell: bash
+        run: |
+          set -euo pipefail
+          REG="${{ env.DOCKER_REGISTRY }}"
+          if [ -z "$REG" ]; then
+            REG="${{ env.JF_URL }}"
+          fi
+          REG="${REG#https://}"
+          REG="${REG#http://}"
+          REG="${REG%%/*}"
+          if [ -z "$REG" ]; then
+            echo "DOCKER_REGISTRY is empty and could not be derived from JF_URL" >&2
+            exit 1
+          fi
+          echo "DOCKER_REGISTRY=$REG" >> $GITHUB_ENV
+          USER="${{ secrets.JF_USER || vars.JF_USER || secrets.NPM_USER || vars.NPM_USER || 'token' }}"
+          PASS="${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN }}"
+          if [ -z "$PASS" ]; then
+            echo "No docker login token is available." >&2
+            exit 1
+          fi
+          echo "$PASS" | docker login "$REG" -u "$USER" --password-stdin
+
+      - name: "Set image tag"
+        id: set-tag
+        run: |
+          ENV_PATH="${{ github.event.inputs.ENVIRONMENT || 'development' }}"
+          TAG="${{ github.event.inputs.IMAGE_TAG }}"
+          [ -z "$TAG" ] && TAG="1.0.${{ github.run_number }}"
+
+          FULL_IMAGE="${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_REPO }}/${ENV_PATH}/${{ env.IMAGE_NAME }}:${TAG}"
+
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "env-path=${ENV_PATH}" >> $GITHUB_OUTPUT
+          echo "full-image=${FULL_IMAGE}" >> $GITHUB_OUTPUT
+
+      - name: "Build Docker image"
+        run: |
+          ARGS=""
+          [ "${{ github.event.inputs.DOCKER_NO_CACHE }}" = "Y" ] && ARGS="--no-cache"
+          jf docker build ${ARGS} \
+            --tag ${{ steps.set-tag.outputs.full-image }} \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --build-arg "NPM_AUTH_TOKEN=${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
+            --build-arg "NPM_PASS=${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.NPM_AUTH_TOKEN || secrets.JF_ACCESS_TOKEN }}" \
+            --build-arg "NPM_USER=${{ vars.NPM_USER || secrets.NPM_USER || 'token' }}" \
+            --build-arg "NPM_REGISTRY_URL=${{ vars.NPM_REGISTRY_URL || secrets.NPM_REGISTRY_URL }}" \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -f ${{ env.DOCKERFILE_PATH }} \
+            .
+
+      - name: "Push Docker image"
+        run: jf docker push ${{ steps.set-tag.outputs.full-image }}
+
+      - name: "Verify image exists in Artifactory"
+        shell: bash
+        run: |
+          set -euo pipefail
+          IMG_PATH="${{ steps.set-tag.outputs.env-path }}/${{ env.IMAGE_NAME }}"
+          TAG="${{ steps.set-tag.outputs.tag }}"
+          jf rt curl -sS -XGET "/api/docker/${{ env.IMAGE_REPO }}/v2/${IMG_PATH}/manifests/${TAG}" \
+            -H "Accept: application/vnd.docker.distribution.manifest.v2+json" >/dev/null
+
+      - name: "Xray security scan"
+        id: xray-scan
+        if: github.event.inputs.XRAY_SCAN != 'N'
+        run: |
+          set +e
+          SCAN_OUT=$(jf docker scan ${{ steps.set-tag.outputs.full-image }} --format=json 2>&1)
+          echo "$SCAN_OUT" > xray-results.json
+          if echo "$SCAN_OUT" | grep -q '"severity":"Critical"'; then
+            echo "has_critical=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_critical=false" >> $GITHUB_OUTPUT
+          fi
+          if echo "$SCAN_OUT" | grep -q '"severity":"High"'; then
+            echo "has_high=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_high=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "Xray gate"
+        id: xray-check
+        run: |
+          if [ "${{ github.event.inputs.XRAY_SCAN }}" = "N" ]; then
+            echo "passed=true" >> $GITHUB_OUTPUT
+          elif [ "${{ steps.xray-scan.outputs.has_critical }}" = "true" ] || \
+               [ "${{ steps.xray-scan.outputs.has_high }}" = "true" ]; then
+            echo "passed=false" >> $GITHUB_OUTPUT
+            echo "Xray: critical or high vulnerabilities found — blocking release" >&2
+            exit 1
+          else
+            echo "passed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "Upload Xray results"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xray-results-${{ github.run_number }}
+          path: xray-results.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: "Publish build info"
+        if: always()
+        run: |
+          if [ -n "${{ env.PROJECT_KEY }}" ]; then
+            jf rt build-add-git --project ${{ env.PROJECT_KEY }}
+            jf rt build-publish  --project ${{ env.PROJECT_KEY }}
+          else
+            jf rt build-add-git
+            jf rt build-publish
+          fi
+
+      - name: "Build summary"
+        if: always()
+        run: |
+          cat >> $GITHUB_STEP_SUMMARY <<'EOF'
+          ## Docker Build
+          | | |
+          |--|--|
+          | Image | ${{ steps.set-tag.outputs.full-image }} |
+          | Tag | ${{ steps.set-tag.outputs.tag }} |
+          | Environment | ${{ steps.set-tag.outputs.env-path }} |
+          | Xray | ${{ steps.xray-check.outputs.passed == 'true' && 'Passed' || 'Failed' }} |
+          EOF
+
+  # ── Release (only if Xray passed) ─────────────────────────────────────────
+  release:
+    name: "Promote to Release"
+    needs: build
+    if: needs.build.outputs.xray-passed == 'true'
+    runs-on: ubuntu-latest
+    environment: ${{ needs.build.outputs.env-path }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: "Checkout"
+        uses: actions/checkout@v4
+
+      - name: "Setup JFrog CLI"
+        uses: jfrog/setup-jfrog-cli@v4
+        id: setup-jfrog-cli
+        env:
+          JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN }}
+          JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
+
+      - name: "Login to JFrog Container Registry"
+        shell: bash
+        run: |
+          set -euo pipefail
+          REG="${{ env.DOCKER_REGISTRY }}"
+          if [ -z "$REG" ]; then
+            REG="${{ env.JF_URL }}"
+          fi
+          REG="${REG#https://}"
+          REG="${REG#http://}"
+          REG="${REG%%/*}"
+          if [ -z "$REG" ]; then
+            echo "DOCKER_REGISTRY is empty and could not be derived from JF_URL" >&2
+            exit 1
+          fi
+          echo "DOCKER_REGISTRY=$REG" >> $GITHUB_ENV
+          USER="${{ secrets.JF_USER || vars.JF_USER || secrets.NPM_USER || vars.NPM_USER || 'token' }}"
+          PASS="${{ steps.setup-jfrog-cli.outputs.oidc-token || secrets.JF_ACCESS_TOKEN || secrets.NPM_AUTH_TOKEN }}"
+          if [ -z "$PASS" ]; then
+            echo "No docker login token is available." >&2
+            exit 1
+          fi
+          echo "$PASS" | docker login "$REG" -u "$USER" --password-stdin
+
+      - name: "Promote image to release repo"
+        run: |
+          TAG="${{ needs.build.outputs.image-tag }}"
+          ENV_PATH="${{ needs.build.outputs.env-path }}"
+          jf rt docker-promote \
+            "${ENV_PATH}/${{ env.IMAGE_NAME }}" \
+            "${{ env.IMAGE_REPO }}" \
+            "docker-releases-local" \
+            --source-tag="${TAG}" \
+            --target-docker-image="${ENV_PATH}/${{ env.IMAGE_NAME }}" \
+            --target-tag="${TAG}" \
+            --copy=true
