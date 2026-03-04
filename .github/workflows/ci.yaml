@@ -30,8 +30,8 @@ on:
 
 # ── Global env ────────────────────────────────────────────────────────────────
 env:
-  JF_URL:          ${{ vars.JFROG_URL }}
-  DOCKER_REGISTRY: ${{ vars.JFROG_DOCKER_REGISTRY }}
+  JF_URL:          ${{ vars.JFROG_URL || 'https://frogops1.jfrog.io' }}
+  DOCKER_REGISTRY: ${{ vars.JFROG_DOCKER_REGISTRY || 'frogops1.jfrog.io' }}
   IMAGE_REPO:  gc-test1
   IMAGE_NAME:  google-calendar
   PROJECT_KEY: sample
@@ -47,18 +47,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup JFrog CLI (OIDC)
+      - name: Setup JFrog CLI
         id: setup-jfrog-cli
         uses: jfrog/setup-jfrog-cli@v4
-        with:
-          oidc-provider-name: github
-          oidc-audience: jfrog-github
         env:
           JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+          JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
 
       - name: Docker Login
         run: jf docker login ${{ env.DOCKER_REGISTRY }}
@@ -70,8 +68,8 @@ jobs:
             --label "org.opencontainers.image.revision=${{ github.sha }}" \
             --build-arg "DOCKER_REGISTRY=${{ env.DOCKER_REGISTRY }}" \
             --build-arg "BASE_REPO=${{ env.BASE_REPO }}" \
-            --build-arg "NPM_AUTH_TOKEN=${{ steps.setup-jfrog-cli.outputs.oidc-token }}" \
-            --build-arg "NPM_PASS=${{ steps.setup-jfrog-cli.outputs.oidc-token }}" \
+            --build-arg "NPM_AUTH_TOKEN=${{ secrets.JF_ACCESS_TOKEN }}" \
+            --build-arg "NPM_PASS=${{ secrets.JF_ACCESS_TOKEN }}" \
             --build-arg "NPM_USER=${{ vars.NPM_USER || 'token' }}" \
             -f ./frontend/Dockerfile \
             .
@@ -98,7 +96,6 @@ jobs:
     environment: production
     permissions:
       contents: read
-      id-token: write
     outputs:
       image-tag:   ${{ steps.set-tag.outputs.tag }}
       image-full:  ${{ steps.set-tag.outputs.full-image }}
@@ -108,14 +105,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup JFrog CLI (OIDC)
+      - name: Setup JFrog CLI
         id: setup-jfrog-cli
         uses: jfrog/setup-jfrog-cli@v4
-        with:
-          oidc-provider-name: github
-          oidc-audience: jfrog-github
         env:
           JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+          JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
 
       - name: Docker Login
         run: jf docker login ${{ env.DOCKER_REGISTRY }}
@@ -141,8 +137,8 @@ jobs:
             --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
             --build-arg "DOCKER_REGISTRY=${{ env.DOCKER_REGISTRY }}" \
             --build-arg "BASE_REPO=${{ env.BASE_REPO }}" \
-            --build-arg "NPM_AUTH_TOKEN=${{ steps.setup-jfrog-cli.outputs.oidc-token }}" \
-            --build-arg "NPM_PASS=${{ steps.setup-jfrog-cli.outputs.oidc-token }}" \
+            --build-arg "NPM_AUTH_TOKEN=${{ secrets.JF_ACCESS_TOKEN }}" \
+            --build-arg "NPM_PASS=${{ secrets.JF_ACCESS_TOKEN }}" \
             --build-arg "NPM_USER=${{ vars.NPM_USER || 'token' }}" \
             -f ./frontend/Dockerfile \
             .
@@ -186,7 +182,7 @@ jobs:
       - name: Build Summary
         if: always()
         run: |
-          cat <<EOF >> $GITHUB_STEP_SUMMARY
+          cat <<'EOF' >> $GITHUB_STEP_SUMMARY
           ## CI Build — ${{ env.IMAGE_NAME }}
           | Property  | Value |
           |---|---|
@@ -210,19 +206,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup JFrog CLI (OIDC)
+      - name: Setup JFrog CLI
         id: setup-jfrog-cli
         uses: jfrog/setup-jfrog-cli@v4
-        with:
-          oidc-provider-name: github
-          oidc-audience: jfrog-github
         env:
           JF_URL: ${{ env.JF_URL }}
+          JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+          JFROG_CLI_AVOID_NEW_VERSION_WARNING: "true"
 
       - name: Docker Login
         run: jf docker login ${{ env.DOCKER_REGISTRY }}
@@ -245,7 +239,7 @@ jobs:
         uses: JFROG/cloud-distribution@v1
         env:
           JF_URL:           ${{ env.JF_URL }}
-          JF_ACCESS_TOKEN:  ${{ steps.setup-jfrog-cli.outputs.oidc-token }}
+          JF_ACCESS_TOKEN:  ${{ secrets.JF_ACCESS_TOKEN }}
         with:
           project:             ${{ env.PROJECT_KEY }}
           service:             ${{ env.IMAGE_NAME }}
