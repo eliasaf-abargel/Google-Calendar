@@ -65,7 +65,7 @@ jobs:
   validate:
     name: "Validate Build (PR)"
     if: github.event_name == 'pull_request'
-    runs-on: frogops-main-default-runner
+    runs-on: ubuntu-latest
     permissions:
       contents: read
 
@@ -136,7 +136,7 @@ jobs:
   build:
     name: "Build and Push"
     if: github.event_name != 'pull_request'
-    runs-on: frogops-main-default-runner
+    runs-on: ubuntu-latest
     environment: ${{ github.event.inputs.ENVIRONMENT || 'development' }}
     permissions:
       contents: read
@@ -503,7 +503,7 @@ jobs:
     name: "Promote to Release"
     needs: build
     if: needs.build.outputs.xray-passed == 'true' && (needs.build.outputs.env-path == 'production' || github.event.inputs.PROMOTE_TO_RELEASE == 'Y')
-    runs-on: frogops-main-default-runner
+    runs-on: ubuntu-latest
     environment: ${{ needs.build.outputs.env-path }}
     permissions:
       contents: read
