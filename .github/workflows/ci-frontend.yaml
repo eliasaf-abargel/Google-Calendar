@@ -17,6 +17,7 @@ on:
         options:
           - "development"
           - "staging"
+          - "production"
         default: "development"
       DOCKER_NO_CACHE:
         description: "Disable Docker layer cache"
